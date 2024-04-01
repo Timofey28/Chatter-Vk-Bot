@@ -3,6 +3,7 @@ from vk_api.longpoll import VkLongPoll, VkEventType
 import vk_api
 import requests
 import vk_api.keyboard as kb
+import json
 
 from background import keep_alive
 keep_alive()
@@ -159,6 +160,13 @@ def main():
             if A3:  # ожидается сообщение для отправления определенному человеку с определенного рабочего аккаунта
                 if msg.lower() == "не надо":
                     vk.messages.send(user_id=buddy_id, message="Не надо так не надо 👌", random_id=0)
+                    A2 = True
+                    A3 = False
+                    refreshClientsOrMineData(buddy_id)
+                    sendFwrds(buddy_id)
+                    continue
+                if msg == "":
+                    vk.messages.send(user_id=buddy_id, message="К сожалению, стикеры, фото и другие медиавложения пока отправлять нельзя (", random_id=0)
                     A2 = True
                     A3 = False
                     refreshClientsOrMineData(buddy_id)
@@ -352,7 +360,7 @@ def getInfo(bInfo):
             if counter == 10:
                 counter = 0
                 kInfoList.append(kInfo.get_keyboard())
-    if kInfo.lines[0]:
+    if kInfo.lines[0] and counter > 0:
         kInfoList.append(kInfo.get_keyboard())
     print(info)
     return kInfoList
