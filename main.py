@@ -1,12 +1,12 @@
-from data_secure import token, my_id, V, bot_id, t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, clients_tokens
-from vk_api.longpoll import VkLongPoll, VkEventType
-import vk_api
 import requests
-import vk_api.keyboard as kb
-import json
 
-from background import keep_alive
-keep_alive()
+import vk_api
+import vk_api.keyboard as kb
+from vk_api.longpoll import VkLongPoll, VkEventType
+from more_itertools import chunked
+
+from data import token, my_id, V, bot_id, t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, client_tokens
+
 
 session = vk_api.VkApi(token=token)
 vk = session.get_api()
@@ -26,7 +26,7 @@ A1, A2, A3 = False, False, False
 clients_data = {}
 workingPages_ids = []
 
-tokens__me = [t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11]
+tokens__me = [t0, t4, t5, t6, t7, t8, t9, t10, t11]
 ids__me = [requests.get(f"https://api.vk.com/method/users.get?access_token={t}&v={V}").json()["response"][0]["id"] for t in tokens__me]
 workingPages_ids.extend(ids__me)
 token_full_names__me = list(map(lambda x: f'{x["first_name"]} {x["last_name"]}', vk.users.get(user_ids=','.join(list(map(str, ids__me))))))
@@ -60,7 +60,6 @@ kAfterSendingFwrd = kAfterSendingFwrd.get_keyboard()
 def main():
     fillClientsData()
     print("Бот запущен")
-    print("clients_data:", clients_data)
     global tokens, ids, token_full_names, token_names
     global info, people, account_index, incoming_id, unread_chats, unread_messages_amount, A1, A2, A3
     for event in longpoll.listen():
@@ -135,7 +134,7 @@ def main():
                         vk.messages.send(user_id=buddy_id, message='Подожди пару секунд...', keyboard=kStart, random_id=0)
                         kInfoList = getInfo(True)
                         for kil in kInfoList:
-                            vk.messages.send(user_id=buddy_id, message='<3', keyboard=kil, random_id=0)
+                            vk.messages.send(user_id=buddy_id, message='❤️', keyboard=kil, random_id=0)
                         if not kInfoList:
                             vk.messages.send(user_id=buddy_id, message='Непрочитанных сообщений больше нет 😎', keyboard=kStart, random_id=0)
                         else:
@@ -189,7 +188,7 @@ def main():
                     A2 = True
                     A3 = False
                     refreshClientsOrMineData(buddy_id)
-                    sendFwrds()
+                    sendFwrds(buddy_id)
                     continue
                 for acc in info:
                     if acc[0] == account_index:
@@ -210,7 +209,7 @@ def main():
             if msg == "Инфо" or msg == "Все аккаунты":
                 kInfoList = getInfo(True if msg == "Инфо" else False)
                 for kil in kInfoList:
-                    vk.messages.send(user_id=buddy_id, message='<3', keyboard=kil, random_id=0)
+                    vk.messages.send(user_id=buddy_id, message='❤️', keyboard=kil, random_id=0)
                 if not kInfoList:
                     vk.messages.send(user_id=buddy_id, message='Непрочитанных сообщений нет 😎', keyboard=kStart, random_id=0)
                 else:
@@ -238,7 +237,7 @@ def main():
 
 def sendFwrds(buddy_id):
     global A1, A2
-    url = f'https://api.vk.com/method/messages.getHistory?peer_id={incoming_id}&count={unread_messages_amount + 10}&access_token={tokens[account_index]}&v={V}'
+    url = f'https://api.vk.com/method/messages.getHistory?peer_id={incoming_id}&count={min(unread_messages_amount + 10, 200)}&access_token={tokens[account_index]}&v={V}'
     history = requests.get(url).json()["response"]["items"]
     fwrd = [msg["id"] for msg in history[:unread_messages_amount] if "action" not in msg]
     if not fwrd:
@@ -255,11 +254,11 @@ def sendFwrds(buddy_id):
         A1 = True
         A2 = False
         if unread_chats:
-            sendUnreadChats()
+            sendUnreadChats(buddy_id)
         else:
             kInfoList = getInfo(True)
             for kil in kInfoList:
-                vk.messages.send(user_id=buddy_id, message='<3', keyboard=kil, random_id=0)
+                vk.messages.send(user_id=buddy_id, message='❤️', keyboard=kil, random_id=0)
             if not kInfoList:
                 vk.messages.send(user_id=buddy_id, message='Непрочитанных сообщений больше нет 😎', keyboard=kStart, random_id=0)
             else:
@@ -271,8 +270,9 @@ def sendFwrds(buddy_id):
             break
         if "action" not in msg:
             fwrd.append(msg["id"])
-    url = f"https://api.vk.com/method/messages.send?peer_id=-{bot_id}&message=Без проблем бро, вот наша переписка&forward_messages={','.join(list(map(str, fwrd)))}&random_id=0&access_token={tokens[account_index]}&v={V}"
-    requests.get(url)
+    for batch in chunked(fwrd, 100):
+        url = f"https://api.vk.com/method/messages.send?peer_id=-{bot_id}&message=Без проблем бро, вот наша переписка&forward_messages={','.join(list(map(str, batch)))}&random_id=0&access_token={tokens[account_index]}&v={V}"
+        requests.get(url)
     history = vk.messages.getHistory(user_id=ids[account_index], count=1)
     vk.messages.send(user_id=buddy_id, forward_messages=history["items"][0]["id"], keyboard=kAfterSendingFwrd, random_id=0)
 
@@ -431,8 +431,8 @@ def refreshClientsOrMineData(user_id):
 
 
 def fillClientsData():  # выполняется 1 раз после запуска бота
-    global clients_tokens, clients_data, workingPages_ids
-    for cl_id, cl_tokens in clients_tokens.items():
+    global client_tokens, clients_data, workingPages_ids
+    for cl_id, cl_tokens in client_tokens.items():
         cl_data = {}
         cl_data["tokens"] = cl_tokens
         cl_data["ids"] = [requests.get(f"https://api.vk.com/method/users.get?access_token={t}&v={V}").json()["response"][0]["id"] for t in cl_tokens]
